@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import io
 from streamlit_fraud_detector import run, read_transactions, parse_timestamp, Transaction
+from typing import List, Dict, Tuple
 
 
 # --- Helper Functions for Streamlit Integration ---
