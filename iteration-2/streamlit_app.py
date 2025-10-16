@@ -1,8 +1,13 @@
 import streamlit as st
 import pandas as pd
 import io
-from streamlit_fraud_detector import run, read_transactions, parse_timestamp, Transaction
-from typing import List, Dict, Tuple
+from streamlit_fraud_detector import (
+    parse_timestamp,
+    Transaction,
+    score_transaction,
+    severity_label
+)
+from typing import List
 
 
 # --- Helper Functions for Streamlit Integration ---
@@ -16,11 +21,10 @@ def read_transactions_from_uploaded_file(uploaded_file):
 
     txns: List[Transaction] = []
     # Use io.StringIO to treat the string as a file
+    # We use pandas to read the CSV data easily
     reader = pd.read_csv(io.StringIO(string_data)).to_dict('records')
 
     for row in reader:
-        # Convert keys to strings to handle pandas/csv inconsistencies if any
-        # Assuming keys are already correct strings from DictReader/to_dict
         txns.append(Transaction(
             txn_id=str(row["txn_id"]),
             user_id=str(row["user_id"]),
@@ -30,6 +34,7 @@ def read_transactions_from_uploaded_file(uploaded_file):
             ip_country=str(row["ip_country"]),
             merchant_mcc=int(row["merchant_mcc"]),
             device_id=str(row["device_id"]),
+            # parse_timestamp is imported directly
             timestamp=parse_timestamp(str(row["timestamp"])),
         ))
     # Sort by timestamp to make velocity/device rules more sensible
@@ -110,63 +115,6 @@ if uploaded_file is not None:
     st.info(f"Processing transactions using Flag Threshold: **{flag_threshold}**")
 
     try:
-        # We need to adapt the logic to pass the file content, not a path
-        # Since the original 'run' function expects a path, we'll adapt by
-        # reading transactions separately here and passing the list to a
-        # slightly modified 'run' if we wanted to be strictly clean.
-        # However, the fastest way is to simply re-implement the core loop
-        # using the transactions list we get from the helper function.
-
-        # NOTE: For simplicity and to use the existing logic structure:
-        # 1. Save file temporarily (like Flask) OR
-        # 2. Modify read_transactions to accept txns list directly.
-        # Let's use the list approach, but it requires a minor refactor:
-
-        # --- Alternative Refactor: Re-run score_transaction on list ---
-
-        # In the original fraud_detector.py, change the signature of run:
-        # def run(txns: List[Transaction], flag_threshold: int, config: Dict) -> List[Dict]:
-
-        # Since we can't easily change the original script,
-        # we will use a temporary file approach similar to the Flask version for
-        # quick compatibility, but for *true* Streamlit style,
-        # we'd pass the list of Transaction objects.
-
-        # *** Using the 'list of Transactions' approach here for best practice ***
-        # (This requires a slight change in fraud_detector.py's run signature to accept List[Transaction])
-
-        # If you were forced to keep the original 'run(csv_path,...)' signature,
-        # you would save the uploaded file to a temp path and pass the path.
-
-        # For this solution, we will assume you update the signature of 'run' in
-        # fraud_detector.py to:
-        # def run(txns: List[Transaction], flag_threshold: int, config: Dict) -> List[Dict]:
-
-        # --- Streamlit-native logic (assuming run is updated) ---
-
-        # 1. Read the list of Transaction objects
-        txns = read_transactions_from_uploaded_file(uploaded_file)
-
-        st.success(f"Successfully loaded {len(txns)} transactions.")
-
-        # 2. Run the detection (assuming updated run signature)
-        # Note: If you cannot change run, you MUST use the temporary file route.
-        # Assuming the function signature is now run(txns, flag_threshold, config)
-        # detection_results = run(txns, flag_threshold, config)
-
-        # Since I am keeping the original function signatures for minimal change:
-        # Temporary file approach:
-
-        # 1. Convert the uploaded file to a string buffer
-        string_data = uploaded_file.getvalue().decode("utf-8")
-        # 2. Use io.StringIO to simulate a file object for pandas/csv reading
-        df = pd.read_csv(io.StringIO(string_data))
-
-
-        # To avoid complex refactoring, let's process the data here.
-
-        # Re-using the logic, but this time, creating the DataFrame for display
-
         # Streamlit allows us to easily use a function that returns a DataFrame
         @st.cache_data(show_spinner="Analyzing transactions...")
         def analyze_transactions(uploaded_file, flag_threshold, config):
@@ -178,7 +126,7 @@ if uploaded_file is not None:
             results = []
 
             for t in txns:
-                score, rule_results = run.score_transaction(t, user_history, seen_devices, config)
+                score, rule_results = score_transaction(t, user_history, seen_devices, config)
 
                 results.append({
                     "Timestamp": t.timestamp.isoformat(),
@@ -187,7 +135,8 @@ if uploaded_file is not None:
                     "Amount": t.amount,
                     "Currency": t.currency,
                     "Score": score,
-                    "Severity": run.severity_label(score),
+                    # FIX: Call severity_label directly, as it was imported directly.
+                    "Severity": severity_label(score),
                     "Status": "FLAG" if score >= flag_threshold else "OK",
                     "Rules Triggered": "; ".join([f"{rr.name} (+{rr.points})" for rr in rule_results]),
                 })
