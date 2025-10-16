@@ -118,3 +118,50 @@ def severity_label(score: int) -> str:
     if score >= 50: return "MEDIUM"
     if score >= 20: return "LOW"
     return "INFO"
+
+
+def run(csv_path: str, flag_threshold: int, config: Dict) -> List[Dict]:
+    # Streamlit will use io.StringIO instead of a physical path,
+    # so we need to handle that flexibility in read_transactions (see notes below)
+    # For now, if you are running from an actual path, this works:
+
+    # You might need to adjust read_transactions to accept a file-like object
+    # for the Streamlit version, but for a simple path run, this is fine.
+
+    txns = read_transactions(csv_path)
+
+    user_history: Dict[str, List[Transaction]] = {}
+    seen_devices: Dict[str, set] = {}
+
+    # List to hold the results for the UI
+    results = []
+
+    for t in txns:
+        score, rule_results = score_transaction(t, user_history, seen_devices, config)
+        sev = severity_label(score)
+        flagged = "FLAG" if score >= flag_threshold else "OK"
+
+        # Prepare a dictionary for this transaction's result
+        result_entry = {
+            "txn_id": t.txn_id,
+            "user_id": t.user_id,
+            "amount": t.amount,
+            "currency": t.currency,
+            "card_country": t.card_country,
+            "ip_country": t.ip_country,
+            "timestamp": t.timestamp.isoformat(),
+            "score": score,
+            "severity": sev,
+            "status": flagged,
+            "rules_triggered": [
+                {"name": rr.name, "points": rr.points, "details": rr.details}
+                for rr in rule_results
+            ]
+        }
+        results.append(result_entry)
+
+        # Update history and seen devices after scoring
+        user_history.setdefault(t.user_id, []).append(t)
+        seen_devices.setdefault(t.user_id, set()).add(t.device_id)
+
+    return results
