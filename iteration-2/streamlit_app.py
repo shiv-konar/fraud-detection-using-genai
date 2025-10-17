@@ -16,12 +16,11 @@ from typing import List
 @st.cache_data
 def read_transactions_from_uploaded_file(uploaded_file):
     """Reads transactions from a Streamlit uploaded file object."""
-    # Read the file content into a string buffer
+
     string_data = uploaded_file.getvalue().decode("utf-8")
 
     txns: List[Transaction] = []
-    # Use io.StringIO to treat the string as a file
-    # We use pandas to read the CSV data easily
+
     reader = pd.read_csv(io.StringIO(string_data)).to_dict('records')
 
     for row in reader:
