@@ -211,3 +211,6 @@ __marimo__/
 
 # JetBrains IDE project settings
 .idea/
+
+# Streamlit secrets
+iteration-3/.streamlit/secrets.toml
